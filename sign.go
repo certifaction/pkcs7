@@ -147,7 +147,7 @@ func (sd *SignedData) SetEncryptionAlgorithm(d asn1.ObjectIdentifier) {
 // AddSigner is a wrapper around AddSignerChain() that adds a signer without any parent.
 func (sd *SignedData) AddSigner(ee *x509.Certificate, pkey crypto.PrivateKey, config SignerInfoConfig) error {
 	var parents []*x509.Certificate
-	return sd.addSignerChain(ee, pkey, parents, config, true)
+	return sd.addSignerChain(ee, pkey, parents, config, true, true)
 }
 
 // One of the practical use cases of AddSignerNoChain is:
@@ -168,7 +168,7 @@ func (sd *SignedData) AddSigner(ee *x509.Certificate, pkey crypto.PrivateKey, co
 // Use this method, if no certificate needs to be placed in SignedData certificates
 func (sd *SignedData) AddSignerNoChain(ee *x509.Certificate, pkey crypto.PrivateKey, config SignerInfoConfig) error {
 	var parents []*x509.Certificate
-	return sd.addSignerChain(ee, pkey, parents, config, false)
+	return sd.addSignerChain(ee, pkey, parents, config, false, true)
 }
 
 // AddSignerChain signs attributes about the content and adds certificates
@@ -185,10 +185,29 @@ func (sd *SignedData) AddSignerNoChain(ee *x509.Certificate, pkey crypto.Private
 // section of the SignedData.SignerInfo, alongside the serial number of
 // the end-entity.
 func (sd *SignedData) AddSignerChain(ee *x509.Certificate, pkey crypto.PrivateKey, chain []*x509.Certificate, config SignerInfoConfig) error {
-	return sd.addSignerChain(ee, pkey, chain, config, true)
+	return sd.addSignerChain(ee, pkey, chain, config, true, true)
 }
 
-func (sd *SignedData) addSignerChain(ee *x509.Certificate, pkey crypto.PrivateKey, chain []*x509.Certificate, config SignerInfoConfig, includeCertificates bool) error {
+// AddSignerChainPAdES signs attributes about the content and adds certificates
+// and signers infos to the Signed Data. The certificate and private
+// of the end-entity signer are used to issue the signature, and any
+// parent of that end-entity that need to be added to the list of
+// certifications can be specified in the parents slice.
+//
+// It is compatible with PAdES specifications.
+//
+// The signature algorithm used to hash the data is the one of the end-entity
+// certificate.
+//
+// Following RFC 2315, 9.2 SignerInfo type, the distinguished name of
+// the issuer of the end-entity signer is stored in the issuerAndSerialNumber
+// section of the SignedData.SignerInfo, alongside the serial number of
+// the end-entity.
+func (sd *SignedData) AddSignerChainPAdES(ee *x509.Certificate, pkey crypto.PrivateKey, chain []*x509.Certificate, config SignerInfoConfig) error {
+	return sd.addSignerChain(ee, pkey, chain, config, true, false)
+}
+
+func (sd *SignedData) addSignerChain(ee *x509.Certificate, pkey crypto.PrivateKey, chain []*x509.Certificate, config SignerInfoConfig, includeCertificates bool, enableSigningTime bool) error {
 	sd.sd.DigestAlgorithmIdentifiers = append(sd.sd.DigestAlgorithmIdentifiers, pkix.AlgorithmIdentifier{Algorithm: sd.digestOid})
 	hash, err := getHashForOID(sd.digestOid)
 	if err != nil {
@@ -204,7 +223,9 @@ func (sd *SignedData) addSignerChain(ee *x509.Certificate, pkey crypto.PrivateKe
 	attrs := &attributes{}
 	attrs.Add(OIDAttributeContentType, sd.sd.ContentInfo.ContentType)
 	attrs.Add(OIDAttributeMessageDigest, sd.messageDigest)
-	attrs.Add(OIDAttributeSigningTime, time.Now())
+	if enableSigningTime {
+		attrs.Add(OIDAttributeSigningTime, time.Now())
+	}
 
 	// Add id-aa-signing-certificate-v2.
 	if b, err := populateSigningCertificateV2Ext(ee); err == nil {
