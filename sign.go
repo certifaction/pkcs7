@@ -35,6 +35,17 @@ func NewSignedData(data []byte) (*SignedData, error) {
 	return signedData, nil
 }
 
+// NewSignedDigest takes message digest and initializes a PKCS7 SignedData struct that is
+// ready to be signed via AddSigner. The digest algorithm is set to SHA1 by default
+// and can be changed by calling SetDigestAlgorithm.
+func NewSignedDigest(digest []byte) (*SignedData, error) {
+	signedData, err := newSignedDigest(OIDData, digest)
+	if err != nil {
+		return nil, err
+	}
+	return signedData, nil
+}
+
 // One of the practical use cases of NewSignedDataWithContentType is:
 // Pasted from RFC 3161
 //
@@ -80,6 +91,17 @@ func newSignedData(contentType asn1.ObjectIdentifier, data []byte) (*SignedData,
 		Version:     1,
 	}
 	return &SignedData{sd: sd, data: data, digestOid: OIDDigestAlgorithmSHA1}, nil
+}
+
+func newSignedDigest(contentType asn1.ObjectIdentifier, digest []byte) (*SignedData, error) {
+	ci := contentInfo{
+		ContentType: contentType,
+	}
+	sd := signedData{
+		ContentInfo: ci,
+		Version:     1,
+	}
+	return &SignedData{sd: sd, messageDigest: digest, digestOid: OIDDigestAlgorithmSHA1}, nil
 }
 
 // SignerInfoConfig are optional values to include when adding a signer
@@ -213,9 +235,11 @@ func (sd *SignedData) addSignerChain(ee *x509.Certificate, pkey crypto.PrivateKe
 	if err != nil {
 		return err
 	}
-	h := hash.New()
-	h.Write(sd.data)
-	sd.messageDigest = h.Sum(nil)
+	if len(sd.messageDigest) == 0 {
+		h := hash.New()
+		h.Write(sd.data)
+		sd.messageDigest = h.Sum(nil)
+	}
 	encryptionOid, err := getOIDForEncryptionAlgorithm(pkey, sd.digestOid)
 	if err != nil {
 		return err
@@ -304,9 +328,11 @@ func (sd *SignedData) SignWithoutAttr(ee *x509.Certificate, pkey crypto.PrivateK
 	if err != nil {
 		return err
 	}
-	h := hash.New()
-	h.Write(sd.data)
-	sd.messageDigest = h.Sum(nil)
+	if len(sd.messageDigest) == 0 {
+		h := hash.New()
+		h.Write(sd.data)
+		sd.messageDigest = h.Sum(nil)
+	}
 	switch pkey.(type) {
 	case *dsa.PrivateKey:
 		// dsa doesn't implement crypto.Signer so we make a special case
