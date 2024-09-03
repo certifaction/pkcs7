@@ -169,7 +169,7 @@ func (sd *SignedData) SetEncryptionAlgorithm(d asn1.ObjectIdentifier) {
 // AddSigner is a wrapper around AddSignerChain() that adds a signer without any parent.
 func (sd *SignedData) AddSigner(ee *x509.Certificate, pkey crypto.PrivateKey, config SignerInfoConfig) error {
 	var parents []*x509.Certificate
-	return sd.addSignerChain(ee, pkey, parents, config, true, true)
+	return sd.addSignerChain(ee, pkey, parents, config, true, true, true)
 }
 
 // One of the practical use cases of AddSignerNoChain is:
@@ -190,7 +190,7 @@ func (sd *SignedData) AddSigner(ee *x509.Certificate, pkey crypto.PrivateKey, co
 // Use this method, if no certificate needs to be placed in SignedData certificates
 func (sd *SignedData) AddSignerNoChain(ee *x509.Certificate, pkey crypto.PrivateKey, config SignerInfoConfig) error {
 	var parents []*x509.Certificate
-	return sd.addSignerChain(ee, pkey, parents, config, false, true)
+	return sd.addSignerChain(ee, pkey, parents, config, false, true, true)
 }
 
 // AddSignerChain signs attributes about the content and adds certificates
@@ -207,7 +207,7 @@ func (sd *SignedData) AddSignerNoChain(ee *x509.Certificate, pkey crypto.Private
 // section of the SignedData.SignerInfo, alongside the serial number of
 // the end-entity.
 func (sd *SignedData) AddSignerChain(ee *x509.Certificate, pkey crypto.PrivateKey, chain []*x509.Certificate, config SignerInfoConfig) error {
-	return sd.addSignerChain(ee, pkey, chain, config, true, true)
+	return sd.addSignerChain(ee, pkey, chain, config, true, true, true)
 }
 
 // AddSignerChainPAdES signs attributes about the content and adds certificates
@@ -226,10 +226,10 @@ func (sd *SignedData) AddSignerChain(ee *x509.Certificate, pkey crypto.PrivateKe
 // section of the SignedData.SignerInfo, alongside the serial number of
 // the end-entity.
 func (sd *SignedData) AddSignerChainPAdES(ee *x509.Certificate, pkey crypto.PrivateKey, chain []*x509.Certificate, config SignerInfoConfig) error {
-	return sd.addSignerChain(ee, pkey, chain, config, true, false)
+	return sd.addSignerChain(ee, pkey, chain, config, true, false, false)
 }
 
-func (sd *SignedData) addSignerChain(ee *x509.Certificate, pkey crypto.PrivateKey, chain []*x509.Certificate, config SignerInfoConfig, includeCertificates bool, enableSigningTime bool) error {
+func (sd *SignedData) addSignerChain(ee *x509.Certificate, pkey crypto.PrivateKey, chain []*x509.Certificate, config SignerInfoConfig, includeCertificates bool, enableSigningTime bool, enableSigningCertV2 bool) error {
 	sd.sd.DigestAlgorithmIdentifiers = append(sd.sd.DigestAlgorithmIdentifiers, pkix.AlgorithmIdentifier{Algorithm: sd.digestOid})
 	hash, err := getHashForOID(sd.digestOid)
 	if err != nil {
@@ -251,9 +251,11 @@ func (sd *SignedData) addSignerChain(ee *x509.Certificate, pkey crypto.PrivateKe
 		attrs.Add(OIDAttributeSigningTime, time.Now())
 	}
 
-	// Add id-aa-signing-certificate-v2.
-	if b, err := populateSigningCertificateV2Ext(ee); err == nil {
-		attrs.Add(OIDAttributeSigningCertificateV2, asn1.RawValue{FullBytes: b})
+	if enableSigningCertV2 {
+		// Add id-aa-signing-certificate-v2.
+		if b, err := populateSigningCertificateV2Ext(ee); err == nil {
+			attrs.Add(OIDAttributeSigningCertificateV2, asn1.RawValue{FullBytes: b})
+		}
 	}
 
 	for _, attr := range config.ExtraSignedAttributes {
