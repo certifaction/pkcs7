@@ -108,6 +108,7 @@ func newSignedDigest(contentType asn1.ObjectIdentifier, digest []byte) (*SignedD
 type SignerInfoConfig struct {
 	ExtraSignedAttributes   []Attribute
 	ExtraUnsignedAttributes []Attribute
+	ExtraCertificates       []*x509.Certificate
 }
 
 type signedData struct {
@@ -307,6 +308,7 @@ func (sd *SignedData) addSignerChain(ee *x509.Certificate, pkey crypto.PrivateKe
 	if includeCertificates {
 		sd.certs = append(sd.certs, ee)
 		sd.certs = append(sd.certs, chain...)
+		sd.certs = append(sd.certs, config.ExtraCertificates...)
 	}
 
 	return nil
